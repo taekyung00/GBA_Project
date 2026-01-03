@@ -62,11 +62,11 @@ typedef unsigned int   u32;
 
 // 플레이어 정보
 // 초기 위치를 화면 중앙으로 설정 (Pivot 보정: 크기의 절반만큼 뺌)
-int p_x = (SCREEN_W / 2) - 5;
-int p_y = (SCREEN_H / 2) - 5;
-int p_w = 10;
-int p_h = 10;
-int speed = 2;
+const int p_w = 10;
+const int p_h = 10;
+const int speed = 2;
+int p_x = (SCREEN_W / 2) - p_w / 2;
+int p_y = (SCREEN_H / 2) - p_h / 2;
 
 // ---------------------------------------------------------
 // 4. 유틸리티 함수
@@ -83,7 +83,7 @@ void clear_screen(u16 color) {
 void draw_rect(int x, int y, int w, int h, u16 color) {
     for (int row = 0; row < h; ++row) {
         for (int col = 0; col < w; ++col) {
-            // Object Space -> Screen Space 변환
+            // model Space -> Screen Space 변환
             int draw_x = x + col;
             int draw_y = y + row;
 

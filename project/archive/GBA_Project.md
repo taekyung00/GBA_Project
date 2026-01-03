@@ -1,3 +1,89 @@
+### 🗺️ CS200 복습 겸 GBA 포팅 통합 로드맵
+
+### 1단계: 커널과 수학적 기초 (Weeks 2-3 복습)
+
+**[핵심 개념: Window, Input, Linear Algebra]**
+
+- **CS200 복습:** `SDL_Init`을 통한 OS 컨텍스트 생성과 $3 \times 3$ 행렬을 이용한 SRT 변환 학습.
+
+- **GBA 구현:**
+  
+  1. **Context:** `REG_DISPCNT`(`0x4000000`)에 직접 값을 써서 화면 모드(Mode 3)를 켭니다. 이것이 `SDL_CreateWindow`의 로우레벨 버전입니다.
+  
+  2. **Input:** `REG_KEYINPUT`(`0x4000130`)의 비트를 검사하여 `Input` 클래스를 포팅합니다.
+  
+  3. **Fixed-Point Math:** GBA는 FPU가 없으므로 모든 `float` 행렬 연산을 **고정 소수점(Fixed-point)** 기반 정수 연산으로 교체합니다.
+
+- **🎯 목표:** 화면 중앙에 `fixed` 좌표를 가진 사각형을 띄우고 방향키로 이동시키기.
+
+---
+
+### 2단계: 래스터라이저와 SDF의 재해석 (Weeks 4-5 복습)
+
+**[핵심 개념: Immediate Mode, SDF, Font]**
+
+- **CS200 복습:** `glDrawArrays`의 원리와 SDF(Signed Distance Field)를 이용한 수학적 도형 그리기 학습.
+
+- **GBA 구현:**
+  
+  1. **Software Rasterizer:** GPU 쉐이더가 없으므로 **Bresenham 알고리즘**(선)과 **Midpoint Circle 알고리즘**(원)을 직접 CPU로 구현합니다.
+  
+  2. **SDF 대체:** 실시간 `length(pos)` 계산은 GBA CPU에 너무 무겁습니다. PC에서 배운 SDF의 원리를 이해하되, 결과물은 타일 데이터로 미리 구워내는 전략을 세웁니다.
+
+- **🎯 목표:** `DrawLine`, `DrawCircle` 함수를 직접 만들어 화면에 복잡한 도형 그리기.
+
+---
+
+### 3단계: 최적화와 아키텍처 (Week 6 복습)
+
+**[핵심 개념: Batch Rendering, Instancing]**
+
+- **CS200 복습:** 드로우 콜을 줄이기 위한 `BatchRenderer2D`와 `InstancedRenderer2D`의 구조적 차이 학습.
+
+- **GBA 구현:**
+  
+  1. **Mode 0 전환:** 비트맵 모드를 버리고 타일/스프라이트 기반의 Mode 0로 전환합니다.
+  
+  2. **OAM Manager:** GBA의 하드웨어 스프라이트(OAM)는 사실상 **하드웨어 가속 인스턴싱**입니다.
+  
+  3. **Shadow OAM & DMA:** PC의 `Flush()` 개념을 도입하여, VBlank 기간에 RAM의 스프라이트 데이터를 **DMA**로 VRAM에 한 번에 쏘는 구조를 만듭니다.
+
+- **🎯 목표:** 100개 이상의 스프라이트를 프레임 드랍 없이 화면에 뿌리기.
+
+---
+
+### 4단계: 공간 변환과 뷰포트 (Weeks 7-8 복습)
+
+**[핵심 개념: Camera, Viewport, Depth, Post-processing]**
+
+- **CS200 복습:** `ViewMatrix`를 통한 카메라 이동과 프레임버퍼를 이용한 후처리 효과 학습.
+
+- **GBA 구현:**
+  
+  1. **Hardware Scroll:** 카메라 행렬 곱셈 대신 `REG_BGxHOFS` 레지스터를 조작하여 비용 없는 배경 스크롤을 구현합니다.
+  
+  2. **Priority System:** OpenGL의 `glDepthFunc` 대신 GBA의 **Priority(0~3)** 레지스터를 사용하여 레이어 앞뒤 관계를 설정합니다.
+  
+  3. **Hardware SFX:** 쉐이더 대신 **Mosaic** 및 **Blending** 레지스터를 사용하여 후처리 효과를 재현합니다.
+
+- **🎯 목표:** 광활한 맵을 카메라로 탐험하고 모자이크 효과 연출하기.
+
+---
+
+### 5단계: 시스템 통합과 폴리싱 (Weeks 9-13 복습)
+
+**[핵심 개념: Game State, Advanced Systems]**
+
+- **CS200 복습:** `GameStateManager`를 통한 씬 전환과 복잡한 게임 로직 구조 학습.
+
+- **GBA 구현:**
+  
+  1. **State Machine:** PC 엔진의 구조를 본떠 GBA에서도 씬 전환 시스템을 구축합니다.
+  
+  2. **Profiling:** Tracy로 확인했던 병목 지점(예: 과도한 메모리 할당)이 GBA에서 발생하지 않도록 **정적 객체 풀(Static Pool)**을 최종 점검합니다.
+
+- **🎯 목표:** 완벽한 게임 루프와 씬 전환이 포함된 GBA 게임 데모 완성.
+
 ### 🗺️ GBA 베어메탈 엔진 포팅: 상세 계획표 (The Master Plan)
 
 이 계획표는 **[CS200의 개념]** 을 **[GBA의 하드웨어 특성]** 으로 번역하여 구현하는 구체적인 지침서입니다.
