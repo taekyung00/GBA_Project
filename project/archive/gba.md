@@ -1,14 +1,15 @@
 Directory structure:
 └── project/
     ├── README.md
+    ├── gba.txt
+    ├── input_test.c
     ├── makefile
     └── archive/
         ├── compile_process.md
         ├── conversation.md
         ├── draw_single_color.c
         ├── GBA_Project.md
-        ├── hw_to_gba.md
-        └── input_test.c
+        └── hw_to_gba.md
 
 ================================================
 FILE: README.md
@@ -85,6 +86,207 @@ make main
 # 빌드된 파일 삭제 (Clean)
 make clean
 ```
+
+
+================================================
+FILE: gba.txt
+================================================
+[Binary file]
+
+
+================================================
+FILE: input_test.c
+================================================
+// input_test.c
+// GBA Bare-metal Programming: Input, Movement, and Rendering
+// ---------------------------------------------------------
+
+#include <stdbool.h> // bool 타입을 사용하기 위한 표준 헤더
+
+// ---------------------------------------------------------
+// 1. 자료형 및 레지스터 정의 (Memory Mapped I/O)
+// ---------------------------------------------------------
+typedef unsigned short u16;
+typedef unsigned int   u32;
+
+#define REG_BASE        0x04000000
+#define VRAM            ((volatile u16*)0x06000000)
+
+// [레지스터 매핑]
+// volatile 키워드 필수: 하드웨어에 의해 값이 언제든 바뀔 수 있으므로, 
+// 컴파일러가 최적화(캐싱)하지 않고 매번 메모리 주소에서 직접 읽도록 강제함.
+#define REG_DISPCNT     (*(volatile u32*)(REG_BASE + 0x0000)) // 디스플레이 제어
+#define REG_VCOUNT      (*(volatile u16*)(REG_BASE + 0x0006)) // 수직 라인 카운터 (Scanline)
+#define REG_KEYINPUT    (*(volatile u16*)(REG_BASE + 0x0130)) // 키 입력 상태
+
+// [설정 상수]
+#define MODE_3          0x0003 // 비트맵 모드 (240x160, 16bit Color)
+#define BG2_ENABLE      0x0400 // 배경 레이어 2 활성화
+#define SCREEN_W        240
+#define SCREEN_H        160
+
+// ---------------------------------------------------------
+// 2. 색상 및 키 매크로
+// ---------------------------------------------------------
+
+// [RGB 매크로]
+// GBA는 15bit 색상(0BBBBBGGGGGRRRRR)을 사용함.
+// 각 채널 범위: 0 ~ 31
+#define RGB(r, g, b)    ((u16)((r) | ((g) << 5) | ((b) << 10)))
+
+// [기본 색상]
+#define COLOR_BLACK     RGB(0,  0,  0)
+#define COLOR_WHITE     RGB(31, 31, 31)
+#define COLOR_RED       RGB(31, 0,  0)
+#define COLOR_GREEN     RGB(0,  31, 0)
+#define COLOR_BLUE      RGB(0,  0,  31)
+#define COLOR_GOLD      RGB(31, 25, 0)
+
+// [키 마스크]
+// 각 비트가 버튼 하나에 대응됨.
+#define KEY_A           0x0001
+#define KEY_B           0x0002
+#define KEY_SELECT      0x0004
+#define KEY_START       0x0008
+#define KEY_RIGHT       0x0010
+#define KEY_LEFT        0x0020
+#define KEY_UP          0x0040
+#define KEY_DOWN        0x0080
+#define KEY_R           0x0100
+#define KEY_L           0x0200
+
+// ---------------------------------------------------------
+// 3. 전역 상태 변수 (Global State)
+// ---------------------------------------------------------
+
+// 플레이어 정보
+// 초기 위치를 화면 중앙으로 설정 (Pivot 보정: 크기의 절반만큼 뺌)
+const int p_w = 10;
+const int p_h = 10;
+const int speed = 2;
+int p_x = (SCREEN_W / 2) - p_w / 2;
+int p_y = (SCREEN_H / 2) - p_h / 2;
+
+// ---------------------------------------------------------
+// 4. 유틸리티 함수
+// ---------------------------------------------------------
+
+// 화면 전체 지우기 (초기화 및 배경 변경 시 사용)
+void clear_screen(u16 color) {
+    for (int i = 0; i < SCREEN_W * SCREEN_H; ++i) {
+        VRAM[i] = color;
+    }
+}
+
+// 사각형 그리기 (클리핑 포함)
+void draw_rect(int x, int y, int w, int h, u16 color) {
+    for (int row = 0; row < h; ++row) {
+        for (int col = 0; col < w; ++col) {
+            // model Space -> Screen Space 변환
+            int draw_x = x + col;
+            int draw_y = y + row;
+
+            // [클리핑 (Clipping)]
+            // 화면 밖의 좌표에 쓰려고 하면 메모리 침범(Memory Corruption) 발생 위험.
+            // 유효한 좌표 범위 내에서만 그리기 수행.
+            if (draw_x >= 0 && draw_x < SCREEN_W && draw_y >= 0 && draw_y < SCREEN_H) {
+                VRAM[draw_y * SCREEN_W + draw_x] = color;
+            }
+        }
+    }
+}
+
+// 수직 동기화 (VSync)
+// 화면 갱신 중에 VRAM을 건드리면 '티어링(Tearing)' 현상 발생.
+// 전자총이 그림을 다 그리고 처음으로 돌아가는 VBlank 구간(160~227)을 기다림.
+void sync_vblank() {
+    // 1. 이미 VBlank 중이라면 다음 프레임까지 대기 (Edge Trigger 유도)
+    while (REG_VCOUNT >= 160);
+    // 2. VBlank가 시작될 때까지 대기
+    while (REG_VCOUNT < 160);
+}
+
+// ---------------------------------------------------------
+// 5. 메인 함수 (Game Loop)
+// ---------------------------------------------------------
+int main() {
+    // 하드웨어 초기화
+    REG_DISPCNT = MODE_3 | BG2_ENABLE;
+
+    // 초기 렌더링
+    u16 background_color = COLOR_BLACK;
+    clear_screen(background_color);
+    draw_rect(p_x, p_y, p_w, p_h, COLOR_BLUE);
+
+    while (1) {
+        // --------------------------------------
+        // [Step 1] 입력 처리 및 상태 갱신 (Update)
+        // --------------------------------------
+        
+        // 잔상 처리를 위해 이동 전 좌표 기억
+        int old_x = p_x;
+        int old_y = p_y;
+
+        // 키 입력 레지스터 읽기
+        u16 key_state = REG_KEYINPUT;
+
+        // 1-1. 배경 색상 변경 로직
+        // GBA 버튼은 Active Low 방식 (눌림=0, 뗌=1).
+        // 따라서 비트 마스킹 결과가 0일 때가 '눌린 상태'임.
+        u16 new_bg_color = background_color;
+
+        if      ( !(key_state & KEY_A) )      new_bg_color = COLOR_RED;
+        else if ( !(key_state & KEY_B) )      new_bg_color = COLOR_GOLD;
+        else if ( !(key_state & KEY_L) )      new_bg_color = COLOR_GREEN;
+        else if ( !(key_state & KEY_R) )      new_bg_color = COLOR_WHITE;
+        else if ( !(key_state & KEY_SELECT) ) new_bg_color = COLOR_BLACK;
+
+        // [최적화 핵심]
+        // 매 프레임 clear_screen을 호출하면 CPU 부하가 심해짐.
+        // 상태(색상)가 실제로 바뀌었을 때만 화면 전체 갱신 수행.
+        if (new_bg_color != background_color) {
+            background_color = new_bg_color;
+            clear_screen(background_color);
+            // 배경을 지우면 플레이어도 지워지므로 즉시 다시 그림
+            draw_rect(p_x, p_y, p_w, p_h, COLOR_BLUE);
+        }
+
+        // 1-2. 이동 로직
+        if ( !(key_state & KEY_UP) )    p_y -= speed;
+        if ( !(key_state & KEY_DOWN) )  p_y += speed;
+        if ( !(key_state & KEY_LEFT) )  p_x -= speed;
+        if ( !(key_state & KEY_RIGHT) ) p_x += speed;
+
+        // 화면 밖으로 나가지 않도록 좌표 고정 (Clamping)
+        if (p_x < 0) p_x = 0;
+        if (p_x > SCREEN_W - p_w) p_x = SCREEN_W - p_w;
+        if (p_y < 0) p_y = 0;
+        if (p_y > SCREEN_H - p_h) p_y = SCREEN_H - p_h;
+
+
+        // --------------------------------------
+        // [Step 2] 타이밍 동기화 (Sync)
+        // --------------------------------------
+        sync_vblank();
+
+
+        // --------------------------------------
+        // [Step 3] 렌더링 (Render)
+        // --------------------------------------
+        
+        // [더티 렉탱글 (Dirty Rectangle)]
+        // 화면 전체를 지우지 않고, 움직임이 발생한 부분만 수정함.
+        if (p_x != old_x || p_y != old_y) {
+            // 1. 이전 위치 지우기: 현재 배경색으로 덮어씀 (잔상 제거)
+            draw_rect(old_x, old_y, p_w, p_h, background_color);
+            
+            // 2. 새 위치 그리기: 플레이어 색상으로 그림
+            draw_rect(p_x, p_y, p_w, p_h, COLOR_BLUE);
+        }
+    }
+
+    return 0;
+}
 
 
 ================================================
@@ -192,6 +394,100 @@ FILE: archive/draw_single_color.c
 ================================================
 FILE: archive/GBA_Project.md
 ================================================
+### 🗺️ CS200 복습 겸 GBA 포팅 통합 로드맵
+
+### 1단계: 커널과 수학적 기초 (Weeks 2-3 복습)
+
+**[핵심 개념: Window, Input, Linear Algebra]**
+
+- **CS200 복습:** `SDL_Init`을 통한 OS 컨텍스트 생성과 $3 \times 3$ 행렬을 이용한 SRT 변환 학습.
+
+- **GBA 구현:**
+  
+  1. **Context:** `REG_DISPCNT`(`0x4000000`)에 직접 값을 써서 화면 모드(Mode 3)를 켭니다. 이것이 `SDL_CreateWindow`의 로우레벨 버전입니다.
+  
+  2. **Input:** `REG_KEYINPUT`(`0x4000130`)의 비트를 검사하여 `Input` 클래스를 포팅합니다.
+  
+  3. **Fixed-Point Math:** GBA는 FPU가 없으므로 모든 `float` 행렬 연산을 **고정 소수점(Fixed-point)** 기반 정수 연산으로 교체합니다.
+
+- **🎯 목표:** 화면 중앙에 `fixed` 좌표를 가진 사각형을 띄우고 방향키로 이동시키기.
+
+---
+
+### 2단계: 래스터라이저와 SDF의 재해석 (Weeks 4-5 복습)
+
+**[핵심 개념: Immediate Mode, SDF, Font]**
+
+- **CS200 복습:** `glDrawArrays`의 원리와 SDF(Signed Distance Field)를 이용한 수학적 도형 그리기 학습.
+
+- **GBA 구현:**
+  
+  1. **Software Rasterizer:** GPU 쉐이더가 없으므로 **Bresenham 알고리즘**(선)과 **Midpoint Circle 알고리즘**(원)을 직접 CPU로 구현합니다.
+  
+  2. **SDF 대체:** 실시간 `length(pos)` 계산은 GBA CPU에 너무 무겁습니다. PC에서 배운 SDF의 원리를 이해하되, 결과물은 타일 데이터로 미리 구워내는 전략을 세웁니다.
+
+- **🎯 목표:** `DrawLine`, `DrawCircle` 함수를 직접 만들어 화면에 복잡한 도형 그리기.
+
+---
+
+### 3단계: 최적화와 아키텍처 (Week 6 복습)
+
+**[핵심 개념: Batch Rendering, Instancing]**
+
+- **CS200 복습:** 드로우 콜을 줄이기 위한 `BatchRenderer2D`와 `InstancedRenderer2D`의 구조적 차이 학습.
+
+- **GBA 구현:**
+  
+  1. **Mode 0 전환:** 비트맵 모드를 버리고 타일/스프라이트 기반의 Mode 0로 전환합니다.
+  
+  2. **OAM Manager:** GBA의 하드웨어 스프라이트(OAM)는 사실상 **하드웨어 가속 인스턴싱**입니다.
+  
+  3. **Shadow OAM & DMA:** PC의 `Flush()` 개념을 도입하여, VBlank 기간에 RAM의 스프라이트 데이터를 **DMA**로 VRAM에 한 번에 쏘는 구조를 만듭니다.
+
+- **🎯 목표:** 100개 이상의 스프라이트를 프레임 드랍 없이 화면에 뿌리기.
+
+---
+
+### 4단계: 공간 변환과 뷰포트 (Weeks 7-8 복습)
+
+**[핵심 개념: Camera, Viewport, Depth, Post-processing]**
+
+- **CS200 복습:** `ViewMatrix`를 통한 카메라 이동과 프레임버퍼를 이용한 후처리 효과 학습.
+
+- **GBA 구현:**
+  
+  1. **Hardware Scroll:** 카메라 행렬 곱셈 대신 `REG_BGxHOFS` 레지스터를 조작하여 비용 없는 배경 스크롤을 구현합니다.
+  
+  2. **Priority System:** OpenGL의 `glDepthFunc` 대신 GBA의 **Priority(0~3)** 레지스터를 사용하여 레이어 앞뒤 관계를 설정합니다.
+  
+  3. **Hardware SFX:** 쉐이더 대신 **Mosaic** 및 **Blending** 레지스터를 사용하여 후처리 효과를 재현합니다.
+
+- **🎯 목표:** 광활한 맵을 카메라로 탐험하고 모자이크 효과 연출하기.
+
+---
+
+### 5단계: 시스템 통합과 폴리싱 (Weeks 9-13 복습)
+
+**[핵심 개념: Game State, Advanced Systems]**
+
+- **CS200 복습:** `GameStateManager`를 통한 씬 전환과 복잡한 게임 로직 구조 학습.
+
+- **GBA 구현:**
+  
+  1. **State Machine:** PC 엔진의 구조를 본떠 GBA에서도 씬 전환 시스템을 구축합니다.
+  
+  2. **Profiling:** Tracy로 확인했던 병목 지점(예: 과도한 메모리 할당)이 GBA에서 발생하지 않도록 **정적 객체 풀(Static Pool)**을 최종 점검합니다.
+
+- **🎯 목표:** 완벽한 게임 루프와 씬 전환이 포함된 GBA 게임 데모 완성.
+
+- **[추가 목표] 성능 분석 보고서 (Architecture Report)**
+  
+  - *IWRAM vs EWRAM 코드 실행 속도 비교 측정*
+  
+  - *C++ 렌더러와 ARM Assembly 최적화 렌더러의 사이클 비교*
+  
+  - *DMA 전송 시와 CPU 복사 시의 버스 점유율 차이 분석*
+
 ### 🗺️ GBA 베어메탈 엔진 포팅: 상세 계획표 (The Master Plan)
 
 이 계획표는 **[CS200의 개념]** 을 **[GBA의 하드웨어 특성]** 으로 번역하여 구현하는 구체적인 지침서입니다.
@@ -344,199 +640,4 @@ GPU(쉐이더)가 없으므로, 수학 공식을 이용해 점을 찍어 도형�
 FILE: archive/hw_to_gba.md
 ================================================
 [Binary file]
-
-
-================================================
-FILE: archive/input_test.c
-================================================
-// input_test.c
-// GBA Bare-metal Programming: Input, Movement, and Rendering
-// ---------------------------------------------------------
-
-#include <stdbool.h> // bool 타입을 사용하기 위한 표준 헤더
-
-// ---------------------------------------------------------
-// 1. 자료형 및 레지스터 정의 (Memory Mapped I/O)
-// ---------------------------------------------------------
-typedef unsigned short u16;
-typedef unsigned int   u32;
-
-#define REG_BASE        0x04000000
-#define VRAM            ((volatile u16*)0x06000000)
-
-// [레지스터 매핑]
-// volatile 키워드 필수: 하드웨어에 의해 값이 언제든 바뀔 수 있으므로, 
-// 컴파일러가 최적화(캐싱)하지 않고 매번 메모리 주소에서 직접 읽도록 강제함.
-#define REG_DISPCNT     (*(volatile u32*)(REG_BASE + 0x0000)) // 디스플레이 제어
-#define REG_VCOUNT      (*(volatile u16*)(REG_BASE + 0x0006)) // 수직 라인 카운터 (Scanline)
-#define REG_KEYINPUT    (*(volatile u16*)(REG_BASE + 0x0130)) // 키 입력 상태
-
-// [설정 상수]
-#define MODE_3          0x0003 // 비트맵 모드 (240x160, 16bit Color)
-#define BG2_ENABLE      0x0400 // 배경 레이어 2 활성화
-#define SCREEN_W        240
-#define SCREEN_H        160
-
-// ---------------------------------------------------------
-// 2. 색상 및 키 매크로
-// ---------------------------------------------------------
-
-// [RGB 매크로]
-// GBA는 15bit 색상(0BBBBBGGGGGRRRRR)을 사용함.
-// 각 채널 범위: 0 ~ 31
-#define RGB(r, g, b)    ((u16)((r) | ((g) << 5) | ((b) << 10)))
-
-// [기본 색상]
-#define COLOR_BLACK     RGB(0,  0,  0)
-#define COLOR_WHITE     RGB(31, 31, 31)
-#define COLOR_RED       RGB(31, 0,  0)
-#define COLOR_GREEN     RGB(0,  31, 0)
-#define COLOR_BLUE      RGB(0,  0,  31)
-#define COLOR_GOLD      RGB(31, 25, 0)
-
-// [키 마스크]
-// 각 비트가 버튼 하나에 대응됨.
-#define KEY_A           0x0001
-#define KEY_B           0x0002
-#define KEY_SELECT      0x0004
-#define KEY_START       0x0008
-#define KEY_RIGHT       0x0010
-#define KEY_LEFT        0x0020
-#define KEY_UP          0x0040
-#define KEY_DOWN        0x0080
-#define KEY_R           0x0100
-#define KEY_L           0x0200
-
-// ---------------------------------------------------------
-// 3. 전역 상태 변수 (Global State)
-// ---------------------------------------------------------
-
-// 플레이어 정보
-// 초기 위치를 화면 중앙으로 설정 (Pivot 보정: 크기의 절반만큼 뺌)
-int p_x = (SCREEN_W / 2) - 5;
-int p_y = (SCREEN_H / 2) - 5;
-int p_w = 10;
-int p_h = 10;
-int speed = 2;
-
-// ---------------------------------------------------------
-// 4. 유틸리티 함수
-// ---------------------------------------------------------
-
-// 화면 전체 지우기 (초기화 및 배경 변경 시 사용)
-void clear_screen(u16 color) {
-    for (int i = 0; i < SCREEN_W * SCREEN_H; ++i) {
-        VRAM[i] = color;
-    }
-}
-
-// 사각형 그리기 (클리핑 포함)
-void draw_rect(int x, int y, int w, int h, u16 color) {
-    for (int row = 0; row < h; ++row) {
-        for (int col = 0; col < w; ++col) {
-            // Object Space -> Screen Space 변환
-            int draw_x = x + col;
-            int draw_y = y + row;
-
-            // [클리핑 (Clipping)]
-            // 화면 밖의 좌표에 쓰려고 하면 메모리 침범(Memory Corruption) 발생 위험.
-            // 유효한 좌표 범위 내에서만 그리기 수행.
-            if (draw_x >= 0 && draw_x < SCREEN_W && draw_y >= 0 && draw_y < SCREEN_H) {
-                VRAM[draw_y * SCREEN_W + draw_x] = color;
-            }
-        }
-    }
-}
-
-// 수직 동기화 (VSync)
-// 화면 갱신 중에 VRAM을 건드리면 '티어링(Tearing)' 현상 발생.
-// 전자총이 그림을 다 그리고 처음으로 돌아가는 VBlank 구간(160~227)을 기다림.
-void sync_vblank() {
-    // 1. 이미 VBlank 중이라면 다음 프레임까지 대기 (Edge Trigger 유도)
-    while (REG_VCOUNT >= 160);
-    // 2. VBlank가 시작될 때까지 대기
-    while (REG_VCOUNT < 160);
-}
-
-// ---------------------------------------------------------
-// 5. 메인 함수 (Game Loop)
-// ---------------------------------------------------------
-int main() {
-    // 하드웨어 초기화
-    REG_DISPCNT = MODE_3 | BG2_ENABLE;
-
-    // 초기 렌더링
-    u16 background_color = COLOR_BLACK;
-    clear_screen(background_color);
-    draw_rect(p_x, p_y, p_w, p_h, COLOR_BLUE);
-
-    while (1) {
-        // --------------------------------------
-        // [Step 1] 입력 처리 및 상태 갱신 (Update)
-        // --------------------------------------
-        
-        // 잔상 처리를 위해 이동 전 좌표 기억
-        int old_x = p_x;
-        int old_y = p_y;
-
-        // 키 입력 레지스터 읽기
-        u16 key_state = REG_KEYINPUT;
-
-        // 1-1. 배경 색상 변경 로직
-        // GBA 버튼은 Active Low 방식 (눌림=0, 뗌=1).
-        // 따라서 비트 마스킹 결과가 0일 때가 '눌린 상태'임.
-        u16 new_bg_color = background_color;
-
-        if      ( !(key_state & KEY_A) )      new_bg_color = COLOR_RED;
-        else if ( !(key_state & KEY_B) )      new_bg_color = COLOR_GOLD;
-        else if ( !(key_state & KEY_L) )      new_bg_color = COLOR_GREEN;
-        else if ( !(key_state & KEY_R) )      new_bg_color = COLOR_WHITE;
-        else if ( !(key_state & KEY_SELECT) ) new_bg_color = COLOR_BLACK;
-
-        // [최적화 핵심]
-        // 매 프레임 clear_screen을 호출하면 CPU 부하가 심해짐.
-        // 상태(색상)가 실제로 바뀌었을 때만 화면 전체 갱신 수행.
-        if (new_bg_color != background_color) {
-            background_color = new_bg_color;
-            clear_screen(background_color);
-            // 배경을 지우면 플레이어도 지워지므로 즉시 다시 그림
-            draw_rect(p_x, p_y, p_w, p_h, COLOR_BLUE);
-        }
-
-        // 1-2. 이동 로직
-        if ( !(key_state & KEY_UP) )    p_y -= speed;
-        if ( !(key_state & KEY_DOWN) )  p_y += speed;
-        if ( !(key_state & KEY_LEFT) )  p_x -= speed;
-        if ( !(key_state & KEY_RIGHT) ) p_x += speed;
-
-        // 화면 밖으로 나가지 않도록 좌표 고정 (Clamping)
-        if (p_x < 0) p_x = 0;
-        if (p_x > SCREEN_W - p_w) p_x = SCREEN_W - p_w;
-        if (p_y < 0) p_y = 0;
-        if (p_y > SCREEN_H - p_h) p_y = SCREEN_H - p_h;
-
-
-        // --------------------------------------
-        // [Step 2] 타이밍 동기화 (Sync)
-        // --------------------------------------
-        sync_vblank();
-
-
-        // --------------------------------------
-        // [Step 3] 렌더링 (Render)
-        // --------------------------------------
-        
-        // [더티 렉탱글 (Dirty Rectangle)]
-        // 화면 전체를 지우지 않고, 움직임이 발생한 부분만 수정함.
-        if (p_x != old_x || p_y != old_y) {
-            // 1. 이전 위치 지우기: 현재 배경색으로 덮어씀 (잔상 제거)
-            draw_rect(old_x, old_y, p_w, p_h, background_color);
-            
-            // 2. 새 위치 그리기: 플레이어 색상으로 그림
-            draw_rect(p_x, p_y, p_w, p_h, COLOR_BLUE);
-        }
-    }
-
-    return 0;
-}
 

@@ -1,0 +1,1057 @@
+Directory structure:
+└── project/
+    ├── README.md
+    ├── makefile
+    ├── archive/
+    │   ├── compile_process.md
+    │   ├── conversation.md
+    │   ├── draw_single_color.c
+    │   ├── gba.md
+    │   ├── GBA_Project.md
+    │   ├── hw_to_gba.md
+    │   ├── input_test.c
+    │   └── volatile.md
+    └── include/
+        ├── fixed.h
+        └── gba.h
+
+================================================
+FILE: README.md
+================================================
+# GBA Development Environment Setup
+
+이 프로젝트는 **DevkitPro** 툴체인을 사용하여 GBA 롬(.gba)을 빌드합니다.
+Makefile의 이식성(Portability)을 위해, 컴파일러 경로는 하드코딩되지 않고 시스템 환경 변수 `DEVKITPRO`를 참조하도록 작성되었습니다.
+
+따라서 빌드하기 전에 아래 과정을 통해 환경 변수가 올바르게 설정되어 있는지 확인해야 합니다.
+
+## 1. 환경 변수 확인 (Verify Environment Variable)
+
+터미널(PowerShell 또는 CMD)을 열고 아래 명령어를 입력하여 경로가 출력되는지 확인합니다.
+
+```powershell
+echo $env:DEVKITPRO
+# 성공 시 예시 출력: C:\devkitPro
+# 실패 시: 아무것도 출력되지 않음
+```
+
+### Command Prompt (CMD)
+
+```DOS
+echo %DEVKITPRO%
+# 성공 시 예시 출력: C:\devkitPro
+# 실패 시: %DEVKITPRO% 라고 그대로 출력됨
+```
+
+경로가 올바르게 출력된다면 설정이 완료된 것입니다. 아무것도 출력되지 않는다면 **2. 환경 변수 설정**을 진행해 주세요.
+
+---
+
+## 2. 환경 변수 설정 (Set Environment Variable)
+
+Windows 환경에서 `DEVKITPRO` 변수를 영구적으로 등록하는 방법입니다.
+
+1. **[시스템 환경 변수 편집]** 실행
+   
+   - `Win` 키를 누르고 "시스템 환경 변수 편집" (Edit the system environment variables) 검색 및 실행.
+
+2. **[환경 변수(N)...]** 버튼 클릭
+   
+   - 창 하단의 '환경 변수' 버튼을 클릭합니다.
+
+3. **시스템 변수(S)에 새로 만들기**
+   
+   - '사용자 변수'가 아닌, 아래쪽의 **'시스템 변수'** 섹션에서 **[새로 만들기(W)...]** 를 클릭합니다.
+
+4. **변수 값 입력**
+   
+   - **변수 이름(Variable name):** `DEVKITPRO`
+   
+   - **변수 값(Variable value):** `C:\devkitPro`
+     
+     - *(주의: 본인의 DevkitPro 설치 경로가 다르다면 해당 경로를 입력하세요. 예: D:\devkitPro)*
+
+5. **확인 및 재부팅**
+   
+   - 모든 창에서 [확인]을 눌러 저장합니다.
+   
+   - **중요:** 이미 열려있던 터미널(VS Code 등)에는 반영되지 않습니다. **터미널이나 VS Code를 완전히 껐다가 다시 켜주세요.**
+
+---
+
+## 3. 빌드 테스트 (Build Test)
+
+설정이 완료되었다면, 프로젝트 폴더에서 아래 명령어로 빌드를 테스트할 수 있습니다.
+
+```powershell
+# main.c 파일을 빌드하여 main.gba 생성
+make main
+
+# 빌드된 파일 삭제 (Clean)
+make clean
+```
+
+
+================================================
+FILE: makefile
+================================================
+# # -------------------------------------------------------------------------
+# #  Universal GBA Makefile (Final Fix)
+# #  설명: .SECONDARY 뒤를 비워서 모든 중간 파일 삭제를 강제로 막음
+# # -------------------------------------------------------------------------
+
+# # [0. Make Config]
+# MAKEFLAGS += --no-builtin-rules
+# .SUFFIXES:
+# # 중요: 뒤에 아무것도 안 적으면 "모든 타겟을 보존하라"는 뜻이 됩니다.
+# .SECONDARY:
+
+# # [1. Path Settings]
+# ifeq ($(OS),Windows_NT)
+#     DEVKITPRO ?= C:/devkitPro
+# else
+#     DEVKITPRO ?= /opt/devkitpro
+# endif
+
+# DEVKITARM ?= $(DEVKITPRO)/devkitARM
+# BIN_PATH = $(DEVKITARM)/bin
+# PREFIX   = arm-none-eabi-
+
+# # [2. Tool Definitions]
+# CC      = $(BIN_PATH)/$(PREFIX)gcc
+# OBJCOPY = $(BIN_PATH)/$(PREFIX)objcopy
+# FIX     = $(DEVKITPRO)/tools/bin/gbafix
+
+# # [3. Compilation Flags]
+# ARCH    = -mthumb -mthumb-interwork
+# SPECS   = -specs=$(DEVKITARM)/arm-none-eabi/lib/gba.specs
+# CFLAGS  = $(ARCH) $(SPECS) -O2 -Wall
+
+# # [4. Build Rules]
+
+# # 기본 타겟
+# all: main.gba
+
+# # (1) 바로가기 규칙
+# %: %.gba
+# 	@echo "Build Complete: $@"
+
+# # (2) .elf -> .gba
+# %.gba: %.elf
+# 	@echo "  [OBJCOPY] $@"
+# 	$(OBJCOPY) -v -O binary $< $@
+# 	@echo "  [GBAFIX]  $@"
+# 	$(FIX) $@ -p -t$(basename $@)
+
+# # (3) .c -> .elf
+# %.elf: %.c
+# 	@echo "  [COMPILE] $<"
+# 	$(CC) $(CFLAGS) -o $@ $<
+
+# # [5. Clean Up]
+# clean:
+# 	@echo "Cleaning up..."
+# 	rm -f *.elf *.gba *.o *.sav
+
+# =========================================================================
+# GBA Project Makefile
+# -------------------------------------------------------------------------
+# 기능:
+# 1. 'make': src 폴더의 모든 코드를 합쳐서 main.gba 생성
+# 2. 'make test TARGET=xxx': sandbox 폴더의 xxx.c 하나만 컴파일해서 xxx.gba 생성
+# 3. 'make clean': 빌드된 파일들 청소
+# =========================================================================
+
+# -------------------------------------------------------------------------
+# 1. 툴체인 설정 (Toolchain Setup)
+# 환경 변수 DEVKITPRO가 설정되어 있어야 합니다.
+# -------------------------------------------------------------------------
+ifeq ($(strip $(DEVKITPRO)),)
+$(error "Please set DEVKITPRO in your environment. export DEVKITPRO=<path to>devkitPro")
+endif
+
+DEVKITARM  := $(DEVKITPRO)/devkitARM
+PREFIX     := $(DEVKITARM)/bin/arm-none-eabi-
+CC         := $(PREFIX)gcc
+OBJCOPY    := $(PREFIX)objcopy
+GBAFIX     := $(DEVKITPRO)/tools/bin/gbafix
+
+# -------------------------------------------------------------------------
+# 2. 컴파일 옵션 (Flags)
+# -------------------------------------------------------------------------
+# -mthumb-interwork: ARM 모드와 Thumb 모드 간 전환 허용 (GBA 필수)
+# -specs=gba.specs: GBA용 링커 스크립트 및 라이브러리 사용
+# -O2: 최적화 레벨 2 (속도와 크기 균형)
+# -Iinclude: 헤더 파일을 include 폴더에서 찾도록 설정
+# -------------------------------------------------------------------------
+ARCH       := -mthumb -mthumb-interwork
+CFLAGS     := $(ARCH) -O2 -Wall -fno-strict-aliasing -Iinclude
+LDFLAGS    := $(ARCH) -specs=gba.specs
+
+# -------------------------------------------------------------------------
+# 3. 디렉토리 설정 (Directories)
+# -------------------------------------------------------------------------
+BUILD_DIR  := build
+SRC_DIR    := src
+SANDBOX_DIR:= sandbox
+OUTPUT     := main
+
+# -------------------------------------------------------------------------
+# Mode 1: Main Project Build (Default)
+# src 폴더 안의 모든 .c 파일을 찾아서 하나로 뭉칩니다.
+# -------------------------------------------------------------------------
+
+# src 폴더의 모든 .c 파일 목록 (예: src/main.c src/player.c ...)
+SOURCES    := $(wildcard $(SRC_DIR)/*.c)
+# .c 파일 목록을 .o 파일 목록으로 변환 (예: build/main.o build/player.o ...)
+OBJECTS    := $(patsubst $(SRC_DIR)/%.c, $(BUILD_DIR)/%.o, $(SOURCES))
+
+.PHONY: all clean test
+
+# 기본 타겟: main.gba 만들기
+all: $(BUILD_DIR) $(OUTPUT).gba
+
+# 1단계: .elf 파일 생성 (링킹)
+$(OUTPUT).elf: $(OBJECTS)
+	$(CC) $(OBJECTS) -o $@ $(LDFLAGS)
+
+# 2단계: .gba 파일 추출 (바이너리 카피)
+$(OUTPUT).gba: $(OUTPUT).elf
+	$(OBJCOPY) -O binary $< $@
+	$(GBAFIX) $@
+
+# 3단계: .c -> .o 컴파일
+$(BUILD_DIR)/%.o: $(SRC_DIR)/%.c
+	$(CC) $(CFLAGS) -c $< -o $@
+
+# 빌드 폴더 생성
+$(BUILD_DIR):
+	@mkdir -p $@
+
+# -------------------------------------------------------------------------
+# Mode 2: Sandbox Test Build
+# 사용법: make test TARGET=파일명 (확장자 제외)
+# 예시: make test TARGET=input_test
+# -------------------------------------------------------------------------
+
+test:
+ifndef TARGET
+	$(error "Usage: make test TARGET=filename (without .c)")
+endif
+	@mkdir -p $(BUILD_DIR)
+	@echo ">> Compiling Sandbox: $(SANDBOX_DIR)/$(TARGET).c"
+	$(CC) $(CFLAGS) -c $(SANDBOX_DIR)/$(TARGET).c -o $(BUILD_DIR)/$(TARGET).o
+	$(CC) $(BUILD_DIR)/$(TARGET).o -o $(BUILD_DIR)/$(TARGET).elf $(LDFLAGS)
+	$(OBJCOPY) -O binary $(BUILD_DIR)/$(TARGET).elf $(TARGET).gba
+	$(GBAFIX) $(TARGET).gba
+	@echo ">> Build Success: $(TARGET).gba created!"
+
+# -------------------------------------------------------------------------
+# Cleanup
+# -------------------------------------------------------------------------
+
+clean:
+	rm -rf $(BUILD_DIR) *.gba *.elf *.sav
+
+
+================================================
+FILE: archive/compile_process.md
+================================================
+[Binary file]
+
+
+================================================
+FILE: archive/conversation.md
+================================================
+### 1. GBA 개발 기초 & 트러블슈팅
+
+- **C23 표준 이슈:** 최신 컴파일러(`-std=c23`)에서는 `bool`이 예약어입니다. `typedef int bool;` 대신 `#include <stdbool.h>`를 사용해야 합니다.
+
+- **빌드 파이프라인 (Build Pipeline):**
+  
+  1. **Compile & Link (`gcc`):** 소스 코드 $\rightarrow$ `.elf` (메타데이터 포함 실행 파일)
+  
+  2. **Object Copy (`objcopy`):** `.elf` $\rightarrow$ `.gba` (순수 바이너리 추출)
+  
+  3. **Header Fix (`gbafix`):** 닌텐도 로고 및 체크섬 삽입 (실기 구동 필수)
+
+- **아키텍처 패턴:** `main.c` 하나에 몰아넣기보다 **HAL(하드웨어 추상화) / Engine / Game Logic**으로 계층을 나누는 것이 좋습니다.
+
+### 2. 콘솔 아키텍처별 개발 난이도 비교 (Hierarchy)
+
+태경 님이 앞으로 밟아나갈(혹은 피해야 할) 테크 트리입니다.
+
+| **비교군**                       | **승자 (추천)**  | **이유 (CS 관점)**                                                                                                        |
+| ----------------------------- | ------------ | --------------------------------------------------------------------------------------------------------------------- |
+| **GBA vs GB/SFC**             | **GBA**      | **Sweet Spot.** GB/SFC는 어셈블리 필수, 뱅크 스위칭, 비트플레인 그래픽 등 제약이 너무 심함. GBA는 C언어와 선형 메모리를 지원하는 "가장 이상적인 임베디드 학습 도구".          |
+| **GBA vs NDS**                | **GBA**      | **Simplicity.** NDS는 화면 하나만 써도 ARM9 + ARM7 듀얼 코어 동기화, 복잡한 메모리 뱅크 매핑, 전원 관리가 필요함. GBA가 구조 이해에 훨씬 유리.                   |
+| **GBA vs Arduboy**            | **GBA**      | **System vs MCU.** Arduboy(8-bit AVR)는 2.5KB RAM의 극한 최적화(Bit packing) 훈련용. GBA(32-bit ARM)는 본격적인 시스템/엔진 아키텍처 학습용.     |
+| **3D 입문 (GC vs PS1 vs Xbox)** | **GameCube** | **Modern & Bare-metal.** Xbox는 너무 PC 같고, PS1은 고정 소수점/Z-버퍼 부재로 수학적 난이도가 최상(Hell). GC는 현대적 파이프라인(TEV)과 하드웨어 제어의 맛이 공존함. |
+
+### 3. 실기(Real Hardware) vs 에뮬레이션
+
+"코드가 돌아간다고 끝이 아니다"라는 것을 배웠습니다.
+
+- **네이티브 실행 (Native Execution):**
+  
+  - **3DS (`open_agb_firm`):** 에뮬레이터가 아님. 3DS 내부의 GBA 호환 코어(ARM7)를 직접 구동. 신뢰도 최상.
+  
+  - **NDS (`nds-bootstrap`):** 마찬가지로 NDS 하드웨어 칩셋을 직접 사용하며 I/O만 후킹.
+
+- **실기 이슈:**
+  
+  - **세이브 에러:** 하드웨어는 세이브 파일 크기나 타입(SRAM/Flash)에 민감함. 헤더 패치(`gbafix -p`)와 더미 `.sav` 파일이 필요할 수 있음.
+  
+  - **색감/잔상:** PC 모니터와 실기 액정의 감마값, 반응 속도 차이로 인한 모션 블러 존재.
+
+- **개발 워크플로우 (Best Practice):**
+  
+  - **개발 중:** 3DS의 `ftpd`를 이용한 **FTP 무선 전송** (SD카드 보호).
+  
+  - **최종 검증:** GBA 실기 + 이지플래시 + SD카드 이동 (혹은 Multiboot 케이블).
+
+### 4. 물리 엔진 & CS 심화
+
+- **물리 엔진의 역사:**
+  
+  - **GBA/PS1:** FPU(부동소수점 유닛) 부재로 Box2D 같은 리얼 물리는 불가능. 고정 소수점 기반의 단순 로직 사용.
+  
+  - **Gen 7 (PS3/X360):** 멀티코어와 강력한 FPU 등장 이후 물리 시뮬레이션이 표준이 됨.
+
+- **학습 전략:** "물리 수학" 공부는 PC에서 하고, "최적화" 공부는 콘솔 포팅을 통해 할 것.
+
+- **리버스 엔지니어링:**
+  
+  - 소스 코드가 없는 바이너리를 `Ghidra`(정적 분석)와 `mGBA Debugger`(동적 분석)로 뜯어보는 것은 최고의 공부.
+  
+  - 핵심은 **메모리 헌팅(값 변화 추적) $\rightarrow$ 워치포인트 설정 $\rightarrow$ 어셈블리 로직 파악**.
+
+### 5. 커리어 & 포트폴리오 (면접 팁)
+
+이 경험을 닌텐도나 게임 회사 면접에서 어필하는 방법입니다.
+
+- **핵심 키워드:** 절대 "닥터", "롬 해킹" 같은 단어 쓰지 말 것.
+  
+  - $\rightarrow$ **"Target Device Verification (타겟 장비 검증)"**
+  
+  - $\rightarrow$ **"Native Execution Environment (네이티브 실행 환경)"**
+  
+  - $\rightarrow$ **"Cross-validation using real hardware (실기를 통한 교차 검증)"**
+  
+  - $\rightarrow$ **"Low-level Optimization (저수준 최적화)"**
+
+- **가치:** 상용 엔진 없이 베어메탈 환경에서 렌더링 파이프라인과 메모리를 직접 제어해 본 경험은 신입 엔지니어로서 **Top-tier** 역량임.
+
+
+
+================================================
+FILE: archive/draw_single_color.c
+================================================
+[Binary file]
+
+
+================================================
+FILE: archive/gba.md
+================================================
+[Binary file]
+
+
+================================================
+FILE: archive/GBA_Project.md
+================================================
+### 🗺️ CS200 복습 겸 GBA 포팅 통합 로드맵
+
+### 1단계: 커널과 수학적 기초 (Weeks 2-3 복습)
+
+**[핵심 개념: Window, Input, Linear Algebra]**
+
+- **CS200 복습:** `SDL_Init`을 통한 OS 컨텍스트 생성과 $3 \times 3$ 행렬을 이용한 SRT 변환 학습.
+
+- **GBA 구현:**
+  
+  1. **Context:** `REG_DISPCNT`(`0x4000000`)에 직접 값을 써서 화면 모드(Mode 3)를 켭니다. 이것이 `SDL_CreateWindow`의 로우레벨 버전입니다.
+  
+  2. **Input:** `REG_KEYINPUT`(`0x4000130`)의 비트를 검사하여 `Input` 클래스를 포팅합니다.
+  
+  3. **Fixed-Point Math:** GBA는 FPU가 없으므로 모든 `float` 행렬 연산을 **고정 소수점(Fixed-point)** 기반 정수 연산으로 교체합니다.
+
+- **🎯 목표:** 화면 중앙에 `fixed` 좌표를 가진 사각형을 띄우고 방향키로 이동시키기.
+
+---
+
+### 2단계: 래스터라이저와 SDF의 재해석 (Weeks 4-5 복습)
+
+**[핵심 개념: Immediate Mode, SDF, Font]**
+
+- **CS200 복습:** `glDrawArrays`의 원리와 SDF(Signed Distance Field)를 이용한 수학적 도형 그리기 학습.
+
+- **GBA 구현:**
+  
+  1. **Software Rasterizer:** GPU 쉐이더가 없으므로 **Bresenham 알고리즘**(선)과 **Midpoint Circle 알고리즘**(원)을 직접 CPU로 구현합니다.
+  
+  2. **SDF 대체:** 실시간 `length(pos)` 계산은 GBA CPU에 너무 무겁습니다. PC에서 배운 SDF의 원리를 이해하되, 결과물은 타일 데이터로 미리 구워내는 전략을 세웁니다.
+
+- **🎯 목표:** `DrawLine`, `DrawCircle` 함수를 직접 만들어 화면에 복잡한 도형 그리기.
+
+---
+
+### 3단계: 최적화와 아키텍처 (Week 6 복습)
+
+**[핵심 개념: Batch Rendering, Instancing]**
+
+- **CS200 복습:** 드로우 콜을 줄이기 위한 `BatchRenderer2D`와 `InstancedRenderer2D`의 구조적 차이 학습.
+
+- **GBA 구현:**
+  
+  1. **Mode 0 전환:** 비트맵 모드를 버리고 타일/스프라이트 기반의 Mode 0로 전환합니다.
+  
+  2. **OAM Manager:** GBA의 하드웨어 스프라이트(OAM)는 사실상 **하드웨어 가속 인스턴싱**입니다.
+  
+  3. **Shadow OAM & DMA:** PC의 `Flush()` 개념을 도입하여, VBlank 기간에 RAM의 스프라이트 데이터를 **DMA**로 VRAM에 한 번에 쏘는 구조를 만듭니다.
+
+- **🎯 목표:** 100개 이상의 스프라이트를 프레임 드랍 없이 화면에 뿌리기.
+
+---
+
+### 4단계: 공간 변환과 뷰포트 (Weeks 7-8 복습)
+
+**[핵심 개념: Camera, Viewport, Depth, Post-processing]**
+
+- **CS200 복습:** `ViewMatrix`를 통한 카메라 이동과 프레임버퍼를 이용한 후처리 효과 학습.
+
+- **GBA 구현:**
+  
+  1. **Hardware Scroll:** 카메라 행렬 곱셈 대신 `REG_BGxHOFS` 레지스터를 조작하여 비용 없는 배경 스크롤을 구현합니다.
+  
+  2. **Priority System:** OpenGL의 `glDepthFunc` 대신 GBA의 **Priority(0~3)** 레지스터를 사용하여 레이어 앞뒤 관계를 설정합니다.
+  
+  3. **Hardware SFX:** 쉐이더 대신 **Mosaic** 및 **Blending** 레지스터를 사용하여 후처리 효과를 재현합니다.
+
+- **🎯 목표:** 광활한 맵을 카메라로 탐험하고 모자이크 효과 연출하기.
+
+---
+
+### 5단계: 시스템 통합과 폴리싱 (Weeks 9-13 복습)
+
+**[핵심 개념: Game State, Advanced Systems]**
+
+- **CS200 복습:** `GameStateManager`를 통한 씬 전환과 복잡한 게임 로직 구조 학습.
+
+- **GBA 구현:**
+  
+  1. **State Machine:** PC 엔진의 구조를 본떠 GBA에서도 씬 전환 시스템을 구축합니다.
+  
+  2. **Profiling:** Tracy로 확인했던 병목 지점(예: 과도한 메모리 할당)이 GBA에서 발생하지 않도록 **정적 객체 풀(Static Pool)**을 최종 점검합니다.
+
+- **🎯 목표:** 완벽한 게임 루프와 씬 전환이 포함된 GBA 게임 데모 완성.
+
+- **[추가 목표] 성능 분석 보고서 (Architecture Report)**
+  
+  - *IWRAM vs EWRAM 코드 실행 속도 비교 측정*
+  
+  - *C++ 렌더러와 ARM Assembly 최적화 렌더러의 사이클 비교*
+  
+  - *DMA 전송 시와 CPU 복사 시의 버스 점유율 차이 분석*
+
+### 🗺️ GBA 베어메탈 엔진 포팅: 상세 계획표 (The Master Plan)
+
+이 계획표는 **[CS200의 개념]** 을 **[GBA의 하드웨어 특성]** 으로 번역하여 구현하는 구체적인 지침서입니다.
+
+---
+
+### 1단계: 엔진의 심장 (The Heart)
+
+**[관련: Week 2, 3 / HW 1 (Input, Window)]**
+
+가장 먼저 할 일은 OS 없이 기계를 깨우고, 나의 명령(입력)을 듣게 만드는 것입니다.
+
+- **CS200 논리:** `SDL_Init`으로 OS에게 "창 좀 줘"라고 요청하고, `While` 루프에서 이벤트를 기다림.
+
+- **GBA 구현 (Mode 3):**
+  
+  1. **Context 초기화:** `main()` 함수 시작과 동시에 `REG_DISPCNT` 주소(`0x4000000`)에 `0x403` (Mode 3 + BG2 On) 값을 씀. 이것이 `SDL_CreateWindow`입니다.
+  
+  2. **Game Loop:** `while(1)` 무한 루프 생성. OS가 없으므로 프로그램은 절대 종료되지 않아야 합니다.
+  
+  3. **Input Polling:** HW 1의 `Input` 클래스를 포팅합니다. `SDL_GetKeyboardState` 대신 `REG_KEYINPUT`(`0x4000130`)의 비트 값을 읽어 `IsKeyDown`을 구현합니다.
+
+- **🎯 목표:** GBA 에뮬레이터 화면을 빨간색으로 채우고, 버튼을 누르면 파란색으로 변하게 만드세요.
+
+### 2단계: 데이터의 구조화 (The Structure)
+
+**[관련: Week 3, 10 / HW 2, 3 (Vertex, Model)]**
+
+GPU에게 데이터를 설명하는 `VertexLayout`을 제거하고, CPU가 이해하기 쉬운 `struct`로 데이터를 정의합니다.
+
+- **CS200 논리:** `VertexLayout` 클래스로 `float` 데이터가 메모리에 어떻게 깔려있는지 OpenGL에게 설명함.
+
+- **GBA 구현 (Fixed Point):**
+  
+  1. **자료형 재정의:** GBA(ARM7)는 실수(float) 연산이 매우 느립니다. OpenGL의 `float` 좌표를 **고정 소수점(Fixed Point)** 정수로 변환해야 합니다.
+     
+     - `typedef int fixed;` (예: 하위 8비트는 소수부, 상위 24비트는 정수부)
+  
+  2. **Vertex 구조체:** HW 2의 유연한 레이아웃 대신, 엄격한 구조체를 선언합니다.
+     
+     ```c
+     typedef struct { fixed x, y; u16 color; } Vertex;
+     ```
+
+- **🎯 목표:** 화면 중앙 좌표를 `fixed` 변수로 정의하고, 점 하나를 찍으세요.
+
+### 3단계: 소프트웨어 래스터라이저 (The Rasterizer)
+
+**[관련: Week 4, 5 / HW 4, 5 (Immediate, SDF)]**
+
+GPU(쉐이더)가 없으므로, 수학 공식을 이용해 점을 찍어 도형을 그리는 함수를 직접 짭니다. 태경 님이 가장 재미있어할 **"밑바닥 구현"** 단계입니다.
+
+- **CS200 논리:** `SDF` 쉐이더나 `glDrawArrays`를 쓰면 GPU가 알아서 픽셀을 채워줌.
+
+- **GBA 구현 (Software Algo):**
+  
+  1. **DrawPixel:** VRAM 배열 `u16* videoBuffer`의 특정 인덱스에 색상 값을 넣는 함수 구현. (Bounds Check 필수)
+  
+  2. **Line Drawing:** HW 4의 `DrawLine`을 **브레즌햄(Bresenham) 알고리즘**으로 구현. (실수 연산 없이 정수 덧셈만으로 선을 긋는 알고리즘)
+  
+  3. **Circle Drawing:** HW 5의 `SDF` 원리(`length(pos)`)를 사용하는 대신, **Midpoint Circle Algorithm**을 사용하여 CPU 부하 없이 원을 그립니다.
+
+- **🎯 목표:** `DrawLine`, `DrawRect`, `DrawCircle` 함수를 만들어 화면에 그림판처럼 도형을 그리세요.
+
+### 4단계: 하드웨어 가속의 시작 (The Batching)
+
+**[관련: Week 7, 9 / HW 6 (Batch, Instancing)]**
+
+여기서 **Mode 3(비트맵)** 를 버리고 **Mode 0(타일/스프라이트)** 로 넘어갑니다. 이것이 GBA 개발의 **"Batch Rendering"** 입니다.
+
+- **CS200 논리:** `BatchRenderer`에 쿼드를 쌓았다가(AddQuad) 한 번에 전송(Flush)하여 드로우콜을 줄임.
+
+- **GBA 구현 (OAM Manager):**
+  
+  1. **Sprite = Instance:** GBA의 하드웨어 스프라이트 하나하나가 HW 9의 `Instance`입니다. 위치(x, y)와 타일 인덱스만 다르고 같은 그림을 공유합니다.
+  
+  2. **OAM Buffer (Shadow OAM):** VRAM(OAM)에 직접 쓰지 않고, RAM에 `StartBatch`처럼 버퍼를 만듭니다. 게임 로직은 이 버퍼만 건드립니다.
+  
+  3. **DMA 전송 (Flush):** 화면이 다 그려진 후 쉬는 시간(**VBlank**)에 DMA(Direct Memory Access)를 이용해 RAM 버퍼를 OAM으로 한 방에 복사합니다. 이것이 완벽한 `Flush()` 구현입니다.
+
+- **🎯 목표:** 캐릭터 스프라이트 100개를 화면에 띄우고 프레임 드랍 없이 움직이세요.
+
+### 5단계: 카메라와 월드 (The Camera)
+
+**[관련: Week 12 / HW 7 (Camera)]**
+
+행렬 곱셈(Matrix Multiplication)을 제거하고, 하드웨어 스크롤 레지스터를 제어합니다.
+
+- **CS200 논리:** `ViewMatrix`를 만들어서 쉐이더에 보내고, 모든 정점에 곱함.
+
+- **GBA 구현 (Hardware Scroll):**
+  
+  1. **Global Scroll:** 배경(Background)을 움직이는 건 `REG_BG0HOFS`, `REG_BG0VOFS` 레지스터에 값만 넣으면 끝입니다. (비용 0)
+  
+  2. **Camera Class:** HW 7의 `Camera` 클래스를 가져오되, `GetViewMatrix()` 대신 `ApplyToRegister()` 함수를 만듭니다.
+  
+  3. **Culling (최적화):** 카메라 화면 밖의 스프라이트는 OAM 버퍼에 넣지 않도록(Hide) 예외 처리합니다.
+
+- **🎯 목표:** 광활한 타일맵 배경 위를 카메라가 돌아다니고, 캐릭터가 그 위를 걷게 만드세요.
+
+### 6단계: 특수 효과와 마무으리 (The Effects)
+
+**[관련: Week 13 / HW 8 (Post-process, Depth)]**
+
+엔진의 시각적 완성도를 높이는 단계입니다. 쉐이더 대신 **SFX 레지스터**를 씁니다.
+
+- **CS200 논리:** FBO를 만들고 Fragment Shader에서 픽셀 색을 조작(블러, 흑백 등). 깊이 테스트(Depth Test)로 앞뒤 구분.
+
+- **GBA 구현 (SFX Registers):**
+  
+  1. **Priority (Depth 대체):** 배경과 스프라이트의 `Priority` 속성(0~3)을 조절하여 Z-Sorting을 구현합니다.
+  
+  2. **Mosaic (Pixelize):** HW 8의 픽셀라이즈 효과는 `REG_MOSAIC` 레지스터 설정 한 줄이면 하드웨어가 처리해 줍니다.
+  
+  3. **Blending (Alpha):** 반투명 효과나 페이드 인/아웃은 `REG_BLDCNT`와 `Alpha Coefficients`를 조작하여 구현합니다.
+
+- **🎯 목표:** 캐릭터가 풀숲(우선순위 높음) 뒤로 숨고, 화면이 서서히 어두워지는(Fade out) 연출을 넣으세요.
+
+---
+
+### 📅 추천 일정 (Pre-semester Roadmap)
+
+태경 님의 다음 학기(3D 그래픽스) 시작 전까지 이 과정을 끝내면 완벽합니다.
+
+1. **Week 1:** [1단계 & 2단계] 개발 환경 구축(DevkitPro), 점 찍기, 구조체 정의.
+
+2. **Week 2:** [3단계] 선/원 그리기 알고리즘 구현 (소프트웨어 렌더러 완성).
+
+3. **Week 3:** [4단계] 타일 모드(Mode 0) 전환, OAM 스프라이트 띄우기 (배칭 구현).
+
+4. **Week 4:** [5단계 & 6단계] 맵 스크롤, 카메라 구현, 특수 효과 적용.
+
+**[저장된 로드맵 요약]**
+
+- **Step 1:** 엔진 진입점 & 입력 (Mode 3, Input Polling)
+
+- **Step 2:** 데이터 구조화 (Fixed Point, Struct)
+
+- **Step 3:** 소프트웨어 래스터라이저 (Bresenham, Midpoint)
+
+- **Step 4:** 하드웨어 배칭 (Mode 0, OAM, DMA)
+
+- **Step 5:** 하드웨어 카메라 (Scroll Reg, Affine)
+
+- **Step 6:** 하드웨어 특수효과 (Mosaic, Blend, Priority)
+
+
+
+================================================
+FILE: archive/hw_to_gba.md
+================================================
+[Binary file]
+
+
+================================================
+FILE: archive/input_test.c
+================================================
+// input_test.c
+// GBA Bare-metal Programming: Input, Movement, and Rendering
+// ---------------------------------------------------------
+
+#include <stdbool.h> // bool 타입을 사용하기 위한 표준 헤더
+
+// ---------------------------------------------------------
+// 1. 자료형 및 레지스터 정의 (Memory Mapped I/O)
+// ---------------------------------------------------------
+typedef unsigned short u16;
+typedef unsigned int   u32;
+
+#define REG_BASE        0x04000000
+#define VRAM            ((volatile u16*)0x06000000)
+
+// [레지스터 매핑]
+// volatile 키워드 필수: 하드웨어에 의해 값이 언제든 바뀔 수 있으므로, 
+// 컴파일러가 최적화(캐싱)하지 않고 매번 메모리 주소에서 직접 읽도록 강제함.
+#define REG_DISPCNT     (*(volatile u32*)(REG_BASE + 0x0000)) // 디스플레이 제어
+#define REG_VCOUNT      (*(volatile u16*)(REG_BASE + 0x0006)) // 수직 라인 카운터 (Scanline)
+#define REG_KEYINPUT    (*(volatile u16*)(REG_BASE + 0x0130)) // 키 입력 상태
+
+// [설정 상수]
+#define MODE_3          0x0003 // 비트맵 모드 (240x160, 16bit Color)
+#define BG2_ENABLE      0x0400 // 배경 레이어 2 활성화
+#define SCREEN_W        240
+#define SCREEN_H        160
+
+// ---------------------------------------------------------
+// 2. 색상 및 키 매크로
+// ---------------------------------------------------------
+
+// [RGB 매크로]
+// GBA는 15bit 색상(0BBBBBGGGGGRRRRR)을 사용함.
+// 각 채널 범위: 0 ~ 31
+#define RGB(r, g, b)    ((u16)((r) | ((g) << 5) | ((b) << 10)))
+
+// [기본 색상]
+#define COLOR_BLACK     RGB(0,  0,  0)
+#define COLOR_WHITE     RGB(31, 31, 31)
+#define COLOR_RED       RGB(31, 0,  0)
+#define COLOR_GREEN     RGB(0,  31, 0)
+#define COLOR_BLUE      RGB(0,  0,  31)
+#define COLOR_GOLD      RGB(31, 25, 0)
+
+// [키 마스크]
+// 각 비트가 버튼 하나에 대응됨.
+#define KEY_A           0x0001
+#define KEY_B           0x0002
+#define KEY_SELECT      0x0004
+#define KEY_START       0x0008
+#define KEY_RIGHT       0x0010
+#define KEY_LEFT        0x0020
+#define KEY_UP          0x0040
+#define KEY_DOWN        0x0080
+#define KEY_R           0x0100
+#define KEY_L           0x0200
+
+// ---------------------------------------------------------
+// 3. 전역 상태 변수 (Global State)
+// ---------------------------------------------------------
+
+// 플레이어 정보
+// 초기 위치를 화면 중앙으로 설정 (Pivot 보정: 크기의 절반만큼 뺌)
+const int p_w = 10;
+const int p_h = 10;
+const int speed = 2;
+int p_x = (SCREEN_W / 2) - p_w / 2;
+int p_y = (SCREEN_H / 2) - p_h / 2;
+
+// ---------------------------------------------------------
+// 4. 유틸리티 함수
+// ---------------------------------------------------------
+
+// 화면 전체 지우기 (초기화 및 배경 변경 시 사용)
+void clear_screen(u16 color) {
+    for (int i = 0; i < SCREEN_W * SCREEN_H; ++i) {
+        VRAM[i] = color;
+    }
+}
+
+// 사각형 그리기 (클리핑 포함)
+void draw_rect(int x, int y, int w, int h, u16 color) {
+    for (int row = 0; row < h; ++row) {
+        for (int col = 0; col < w; ++col) {
+            // model Space -> Screen Space 변환
+            int draw_x = x + col;
+            int draw_y = y + row;
+
+            // [클리핑 (Clipping)]
+            // 화면 밖의 좌표에 쓰려고 하면 메모리 침범(Memory Corruption) 발생 위험.
+            // 유효한 좌표 범위 내에서만 그리기 수행.
+            if (draw_x >= 0 && draw_x < SCREEN_W && draw_y >= 0 && draw_y < SCREEN_H) {
+                VRAM[draw_y * SCREEN_W + draw_x] = color;
+            }
+        }
+    }
+}
+
+// 수직 동기화 (VSync)
+// 화면 갱신 중에 VRAM을 건드리면 '티어링(Tearing)' 현상 발생.
+// 전자총이 그림을 다 그리고 처음으로 돌아가는 VBlank 구간(160~227)을 기다림.
+void sync_vblank() {
+    // 1. 이미 VBlank 중이라면 다음 프레임까지 대기 (Edge Trigger 유도)
+    while (REG_VCOUNT >= 160);
+    // 2. VBlank가 시작될 때까지 대기
+    while (REG_VCOUNT < 160);
+}
+
+// ---------------------------------------------------------
+// 5. 메인 함수 (Game Loop)
+// ---------------------------------------------------------
+int main() {
+    // 하드웨어 초기화
+    REG_DISPCNT = MODE_3 | BG2_ENABLE;
+
+    // 초기 렌더링
+    u16 background_color = COLOR_BLACK;
+    clear_screen(background_color);
+    draw_rect(p_x, p_y, p_w, p_h, COLOR_BLUE);
+
+    while (1) {
+        // --------------------------------------
+        // [Step 1] 입력 처리 및 상태 갱신 (Update)
+        // --------------------------------------
+        
+        // 잔상 처리를 위해 이동 전 좌표 기억
+        int old_x = p_x;
+        int old_y = p_y;
+
+        // 키 입력 레지스터 읽기
+        u16 key_state = REG_KEYINPUT;
+
+        // 1-1. 배경 색상 변경 로직
+        // GBA 버튼은 Active Low 방식 (눌림=0, 뗌=1).
+        // 따라서 비트 마스킹 결과가 0일 때가 '눌린 상태'임.
+        u16 new_bg_color = background_color;
+
+        if      ( !(key_state & KEY_A) )      new_bg_color = COLOR_RED;
+        else if ( !(key_state & KEY_B) )      new_bg_color = COLOR_GOLD;
+        else if ( !(key_state & KEY_L) )      new_bg_color = COLOR_GREEN;
+        else if ( !(key_state & KEY_R) )      new_bg_color = COLOR_WHITE;
+        else if ( !(key_state & KEY_SELECT) ) new_bg_color = COLOR_BLACK;
+
+        // [최적화 핵심]
+        // 매 프레임 clear_screen을 호출하면 CPU 부하가 심해짐.
+        // 상태(색상)가 실제로 바뀌었을 때만 화면 전체 갱신 수행.
+        if (new_bg_color != background_color) {
+            background_color = new_bg_color;
+            clear_screen(background_color);
+            // 배경을 지우면 플레이어도 지워지므로 즉시 다시 그림
+            draw_rect(p_x, p_y, p_w, p_h, COLOR_BLUE);
+        }
+
+        // 1-2. 이동 로직
+        if ( !(key_state & KEY_UP) )    p_y -= speed;
+        if ( !(key_state & KEY_DOWN) )  p_y += speed;
+        if ( !(key_state & KEY_LEFT) )  p_x -= speed;
+        if ( !(key_state & KEY_RIGHT) ) p_x += speed;
+
+        // 화면 밖으로 나가지 않도록 좌표 고정 (Clamping)
+        if (p_x < 0) p_x = 0;
+        if (p_x > SCREEN_W - p_w) p_x = SCREEN_W - p_w;
+        if (p_y < 0) p_y = 0;
+        if (p_y > SCREEN_H - p_h) p_y = SCREEN_H - p_h;
+
+
+        // --------------------------------------
+        // [Step 2] 타이밍 동기화 (Sync)
+        // --------------------------------------
+        sync_vblank();
+
+
+        // --------------------------------------
+        // [Step 3] 렌더링 (Render)
+        // --------------------------------------
+        
+        // [더티 렉탱글 (Dirty Rectangle)]
+        // 화면 전체를 지우지 않고, 움직임이 발생한 부분만 수정함.
+        if (p_x != old_x || p_y != old_y) {
+            // 1. 이전 위치 지우기: 현재 배경색으로 덮어씀 (잔상 제거)
+            draw_rect(old_x, old_y, p_w, p_h, background_color);
+            
+            // 2. 새 위치 그리기: 플레이어 색상으로 그림
+            draw_rect(p_x, p_y, p_w, p_h, COLOR_BLUE);
+        }
+    }
+
+    return 0;
+}
+
+
+================================================
+FILE: archive/volatile.md
+================================================
+[Binary file]
+
+
+================================================
+FILE: include/fixed.h
+================================================
+#ifndef FIXED_H
+#define FIXED_H
+
+#include "gba.h" // u32, bool 등 기본 타입 사용을 위해 포함
+
+// =========================================================================
+// 💡 고정 소수점(Fixed Point) 라이브러리 (Q24.8 Format)
+// -------------------------------------------------------------------------
+//
+// [1. 왜 사용하는가?]
+//    GBA(ARM7TDMI)에는 실수(float)를 계산하는 하드웨어(FPU)가 없습니다.
+//    float를 쓰면 소프트웨어적으로 에뮬레이션하느라 속도가 수십 배 느려집니다.
+//    따라서 "256을 곱한 정수"를 사용하여 소수점 연산을 흉내 냅니다.
+//
+// [2. 하드웨어의 관점 (Hardware Agnostic)]
+//    GBA 하드웨어(CPU, PPU)는 이 값이 고정 소수점인지 모릅니다.
+//    그냥 '256배 큰 정수'로 취급하여 덧셈/뺄셈을 수행합니다.
+//    우리가 화면(VRAM/OAM)에 값을 넘길 때만 '정수'로 통역해주면 됩니다.
+//
+// [3. 사용 원칙 (The Two Worlds)]
+//    - 물리 세계 (Physics): 위치(x,y), 속도, 중력 등 움직이는 값 -> 무조건 'fixed' 유지
+//    - 논리 세계 (Logic): 아이템 개수, 인덱스, 타일 번호 -> 일반 'int' 사용
+//    - 렌더링 (Render): 그리기 직전에 'fixed' -> 'int'로 변환하여 하드웨어에 전달
+//
+// =========================================================================
+
+
+// -------------------------------------------------------------------------
+// 1. 설정 상수 (Configuration)
+// -------------------------------------------------------------------------
+#define FIX_SHIFT    8                // 하위 8비트를 소수부로 사용
+#define FIX_SCALE    (1 << FIX_SHIFT) // 256 (1.0을 의미하는 정수 값)
+#define FIX_MASK     (FIX_SCALE - 1)  // 0xFF (소수부 비트 마스크)
+#define FIX_ONE      FIX_SCALE        // 1.0
+
+
+// -------------------------------------------------------------------------
+// 2. 자료형 정의 (Typedef)
+// -------------------------------------------------------------------------
+// int와 같지만, "이 변수는 256배 튀겨진 값이다"라고 명시하기 위해 사용합니다.
+typedef int fixed;
+
+
+// -------------------------------------------------------------------------
+// 3. 변환 매크로 (Conversion Macros)
+// -------------------------------------------------------------------------
+
+// [정수 -> 고정 소수점] (Enter Physics World)
+// 사용: 초기값 설정, 정수 더하기
+// 예: INT_TO_FIX(10) -> 2560
+#define INT_TO_FIX(n)    ((fixed)((n) << FIX_SHIFT))
+
+// [실수 -> 고정 소수점] (Data Import)
+// 사용: 물리 상수 초기화 (예: 중력 9.8, 마찰력 0.1)
+// 주의: float 연산이 포함되므로 '초기화 단계'에서만 사용할 것. 루프 내부 금지.
+#define FLOAT_TO_FIX(f)  ((fixed)((f) * (float)FIX_SCALE))
+
+// [고정 소수점 -> 정수 (버림)] (Render to Hardware)
+// 사용: 최종적으로 화면(VRAM)에 좌표를 찍을 때
+// 예: 2560(10.0) -> 10, 2688(10.5) -> 10
+#define FIX_TO_INT(n)    ((n) >> FIX_SHIFT)
+
+// [고정 소수점 -> 정수 (반올림)] (Render Precise)
+// 사용: 더 정확한 좌표가 필요할 때
+// 예: 10.5 -> 11, 10.4 -> 10
+#define FIX_ROUND(n)     (((n) + (FIX_SCALE / 2)) >> FIX_SHIFT)
+
+// [고정 소수점 -> 실수] (Debugging)
+// 사용: printf 등으로 값을 확인하고 싶을 때
+// 주의: 절대 게임 로직이나 연산용으로 사용하지 말 것 (매우 느림).
+#define FIX_TO_FLOAT(n)  ((float)(n) / (float)FIX_SCALE)
+
+
+// -------------------------------------------------------------------------
+// 4. 산술 연산 함수 (Arithmetic Functions)
+// -------------------------------------------------------------------------
+
+// [덧셈/뺄셈]
+// 그냥 + - 연산자를 사용하면 됩니다. (비트 이동 필요 없음)
+// fixed c = a + b;
+
+
+// [곱셈]
+// 원리: (A * 256) * (B * 256) = (A * B) * 65536
+// 결과가 256^2배가 되므로, 다시 256(SHIFT)으로 나눠줘야 원래 스케일로 돌아옴.
+// (long long) 캐스팅: 32비트끼리 곱하면 오버플로우가 발생할 수 있어 64비트로 확장.
+static inline fixed fix_mul(fixed a, fixed b) {
+    return (fixed)(((long long)a * b) >> FIX_SHIFT);
+}
+
+// [나눗셈]
+// 원리: (A * 256) / (B * 256) = A / B (스케일 소실됨)
+// 미리 A에 256을 한번 더 곱해놓고 나눠야 스케일(256배)이 유지됨.
+static inline fixed fix_div(fixed a, fixed b) {
+    return (fixed)(((long long)a << FIX_SHIFT) / b);
+}
+
+// [절댓값]
+static inline fixed fix_abs(fixed a) {
+    return (a < 0) ? -a : a;
+}
+
+// [최소값]
+static inline fixed fix_min(fixed a, fixed b) {
+    return (a < b) ? a : b;
+}
+
+// [최대값]
+static inline fixed fix_max(fixed a, fixed b) {
+    return (a > b) ? a : b;
+}
+
+#endif // FIXED_H
+
+
+================================================
+FILE: include/gba.h
+================================================
+#ifndef GBA_H
+#define GBA_H
+
+// =========================================================================
+// 1. 기본 자료형 (Primitive Types)
+// -------------------------------------------------------------------------
+// GBA(ARM7TDMI)는 32비트 RISC CPU입니다.
+// C언어의 'int' 크기는 컴파일러마다 다를 수 있으므로, 
+// 하드웨어 비트 수에 딱 맞는 명시적인 타입을 사용하는 것이 표준입니다.
+// =========================================================================
+
+#include <stdbool.h> // 표준 bool, true, false 사용 (C99/C23 호환)
+#include <stddef.h>  // 표준 NULL 사용
+
+typedef unsigned char  u8;  // 8비트 (1바이트): 타일 인덱스, 작은 정수 등
+typedef unsigned short u16; // 16비트 (2바이트): 색상(RGB555), 레지스터 제어 등 주력 타입
+typedef unsigned int   u32; // 32비트 (4바이트): 메모리 주소, 큰 데이터, DMA 전송 시 사용
+
+
+// =========================================================================
+// 2. 메모리 맵 (Memory Map)
+// -------------------------------------------------------------------------
+// GBA는 OS가 없습니다. 특정 메모리 주소에 값을 쓰면 하드웨어가 즉시 반응합니다.
+// 이를 Memory Mapped I/O (MMIO)라고 합니다.
+// =========================================================================
+
+#define REG_BASE        0x04000000 // I/O 레지스터들의 시작 주소
+#define VRAM_BASE       0x06000000 // 비디오 메모리(화면 데이터) 시작 주소
+
+// VRAM 포인터
+// u16 포인터인 이유: VRAM은 보통 16비트(색상 값) 단위로 읽고 쓰기 때문입니다.
+// volatile 필수: 컴파일러가 "아까 썼으니까 안 써도 되겠지?"라고 최적화하는 것을 막습니다.
+#define VRAM            ((volatile u16*)VRAM_BASE)
+
+// =========================================================================
+// 3. 하드웨어 레지스터 (Hardware Registers)
+// -------------------------------------------------------------------------
+// 주소 앞에 *(volatile 타입 *)을 붙이는 이유:
+// 1. (volatile 타입 *): 정수 숫자를 '포인터(주소)'로 취급해라.
+// 2. *: 그 포인터가 가리키는 실제 '값'을 가져오거나 수정해라 (Dereference).
+// =========================================================================
+
+// [디스플레이 제어]
+// 주소: 0x04000000
+// 타입: u32 (본래 u16이지만, 32비트 버스 효율을 위해 u32로 접근하기도 함)
+// 역할: 화면 모드(0~5), 배경 활성화, 스프라이트 활성화 등 총괄 설정
+#define REG_DISPCNT     (*(volatile u32*)(REG_BASE + 0x0000))
+
+// [수직 라인 카운터 (Scanline Counter)]
+// 주소: 0x04000006
+// 타입: u16 (0~227 범위)
+// 역할: 현재 전자총이 그리고 있는 가로줄 번호를 읽음 (Read-Only). VSync 구현의 핵심.
+#define REG_VCOUNT      (*(volatile u16*)(REG_BASE + 0x0006))
+
+// [키 입력 상태]
+// 주소: 0x04000130
+// 타입: u16 (총 10개 버튼이므로 10비트 사용)
+// 역할: 버튼이 눌렸는지 확인. (주의: 눌리면 0, 안 눌리면 1 -> Active Low)
+#define REG_KEYINPUT    (*(volatile u16*)(REG_BASE + 0x0130))
+
+// =========================================================================
+// 4. 설정 상수 (Configuration Constants)
+// =========================================================================
+
+// 화면 크기 (물리적 해상도 고정)
+#define SCREEN_W        240
+#define SCREEN_H        160
+
+// 디스플레이 모드 설정 비트
+// REG_DISPCNT에 OR(|) 연산으로 설정함
+#define MODE_3          0x0003 // 비트맵 모드 (240x160, 트루컬러)
+#define BG2_ENABLE      0x0400 // 배경 레이어 2 켜기 (Mode 3는 BG2를 사용함)
+
+// =========================================================================
+// 5. 색상 매크로 (Color Macros)
+// -------------------------------------------------------------------------
+// GBA는 15비트 색상(BGR555)을 사용합니다. 
+// 포맷: XBBBBBGGGGGRRRRR (MSB 1비트는 사용 안 함)
+// 각 채널 범위: 0 ~ 31
+// =========================================================================
+
+#define RGB(r, g, b)    ((u16)((r) | ((g) << 5) | ((b) << 10)))
+
+#define COLOR_BLACK     RGB(0,  0,  0)
+#define COLOR_WHITE     RGB(31, 31, 31)
+#define COLOR_RED       RGB(31, 0,  0)
+#define COLOR_GREEN     RGB(0,  31, 0)
+#define COLOR_BLUE      RGB(0,  0,  31)
+#define COLOR_GOLD      RGB(31, 25, 0)
+#define COLOR_CYAN      RGB(0,  31, 31)
+#define COLOR_MAGENTA   RGB(31, 0,  31)
+
+// =========================================================================
+// 6. 키 마스크 (Input Key Masks)
+// -------------------------------------------------------------------------
+// REG_KEYINPUT의 특정 비트만 쏙 뽑아내기 위한 필터(Mask)입니다.
+// =========================================================================
+
+#define KEY_A           0x0001 // 0번 비트
+#define KEY_B           0x0002 // 1번 비트
+#define KEY_SELECT      0x0004 // 2번 비트
+#define KEY_START       0x0008 // 3번 비트
+#define KEY_RIGHT       0x0010 // 4번 비트
+#define KEY_LEFT        0x0020 // 5번 비트
+#define KEY_UP          0x0040 // 6번 비트
+#define KEY_DOWN        0x0080 // 7번 비트
+#define KEY_R           0x0100 // 8번 비트
+#define KEY_L           0x0200 // 9번 비트
+
+// =========================================================================
+// 7. 인라인 유틸리티 함수 (Inline Utilities)
+// -------------------------------------------------------------------------
+// 'static inline'을 쓰면 함수 호출 오버헤드 없이 코드가 그 자리에 복사됩니다.
+// 헤더 파일에 구현할 때 가장 좋은 방법입니다.
+// =========================================================================
+
+// VSync 대기 함수
+// 1. 현재 VBlank 중(화면 밖)이라면 다음 프레임까지 기다림 (REG_VCOUNT >= 160)
+// 2. 화면을 그리는 중이라면, 다 그릴 때까지(160줄이 될 때까지) 기다림
+static inline void sync_vblank() {
+    while (REG_VCOUNT >= 160); // VBlank 중이면 대기
+    while (REG_VCOUNT < 160);  // VDraw 중이면 대기
+}
+
+#endif
+
