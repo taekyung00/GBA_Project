@@ -1,0 +1,17 @@
+Directory: project
+Files analyzed: 9
+
+Estimated tokens: 12.8k
+Directory structure:
+└── project/
+    ├── README.md
+    ├── gba_project-setting.txt
+    ├── gba_project-source.txt
+    ├── gba_project-structure.txt
+    ├── makefile
+    ├── split_ingest.py
+    ├── include/
+    │   ├── fixed.h
+    │   └── gba.h
+    └── sandbox/
+        └── input_test.c
