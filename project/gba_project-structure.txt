@@ -1,7 +1,7 @@
 Directory: project
-Files analyzed: 8
+Files analyzed: 9
 
-Estimated tokens: 10.8k
+Estimated tokens: 11.5k
 Directory structure:
 └── project/
     ├── README.md
@@ -10,6 +10,8 @@ Directory structure:
     ├── gba_project-structure.txt
     ├── makefile
     ├── split_ingest.py
-    └── include/
-        ├── fixed.h
-        └── gba.h
+    ├── include/
+    │   ├── fixed.h
+    │   └── gba.h
+    └── src/
+        └── week2.c
