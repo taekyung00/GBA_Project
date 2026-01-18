@@ -73,7 +73,9 @@ int main() {
 
 	fixed speed = INT_TO_FIX(2);  // 이동 속도: 2.0 pixel/frame
 
-    // 초기 플레이어 렌더링
+    // 초기 렌더링
+	u16 background_color = COLOR_BLACK;
+	clear_screen(background_color);
     draw_rect(player.x, player.y, player_w, player_h, player.color);
 	// 무한 루프 (OS로 복귀하지 않음)
 	while (1) {
@@ -88,11 +90,35 @@ int main() {
 		// 키 입력 레지스터 읽기 (Active Low: 누르면 0)
 		u16 keys = REG_KEYINPUT;
 
+		u16 new_bg_color = background_color;
+
+        if      ( !(keys & KEY_A) )      new_bg_color = COLOR_RED;
+        else if ( !(keys & KEY_B) )      new_bg_color = COLOR_GOLD;
+        else if ( !(keys & KEY_L) )      new_bg_color = COLOR_GREEN;
+        else if ( !(keys & KEY_R) )      new_bg_color = COLOR_WHITE;
+        else if ( !(keys & KEY_SELECT) ) new_bg_color = COLOR_BLACK;
+
+		// [최적화 핵심]
+        // 매 프레임 clear_screen을 호출하면 CPU 부하가 심해짐.
+        // 상태(색상)가 실제로 바뀌었을 때만 화면 전체 갱신 수행.
+        if (new_bg_color != background_color) {
+            background_color = new_bg_color;
+            clear_screen(background_color);
+            // 배경을 지우면 플레이어도 지워지므로 즉시 다시 그림
+            draw_rect(player.x, player.y, player_w, player_h, player.color);
+        }
+
 		// 고정 소수점 연산으로 좌표 갱신
 		if (!(keys & KEY_UP)) player.y -= speed;
 		if (!(keys & KEY_DOWN)) player.y += speed;
 		if (!(keys & KEY_LEFT)) player.x -= speed;
 		if (!(keys & KEY_RIGHT)) player.x += speed;
+
+		// 화면 밖으로 나가지 않도록 좌표 고정 (Clamping)
+        if (player.x < 0) player.x = 0;
+        if (player.x > SCREEN_W - player_w) player.x = SCREEN_W - player_w;
+        if (player.y < 0) player.y = 0;
+        if (player.y > SCREEN_H - player_h) player.y = SCREEN_H - player_h;
 
 		// -------------------------------------------------
 		// [Step 2] Sync (Timing)
@@ -113,7 +139,7 @@ int main() {
         // 화면 전체를 지우지 않고, 움직임이 발생한 부분만 수정함.
 		if (old_x != player.x || old_y != player.y) {
 			// 이전 위치를 검은색으로 지워 잔상 제거
-			draw_rect(old_x, old_y, player_w, player_h, COLOR_BLACK);
+			draw_rect(old_x, old_y, player_w, player_h, background_color);
             // 새로운 위치에 플레이어 그리기
             draw_rect(player.x, player.y, player_w, player_h, player.color);
 		}
