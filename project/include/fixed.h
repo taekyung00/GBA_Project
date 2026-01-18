@@ -70,6 +70,12 @@ typedef int fixed;
 // 주의: 절대 게임 로직이나 연산용으로 사용하지 말 것 (매우 느림).
 #define FIX_TO_FLOAT(n)  ((float)(n) / (float)FIX_SCALE)
 
+#define fixed_zero INT_TO_FIX(0)
+
+#define fixed_screen_w INT_TO_FIX(SCREEN_W)
+#define fixed_screen_h INT_TO_FIX(SCREEN_H)
+
+
 
 // -------------------------------------------------------------------------
 // 4. 산술 연산 함수 (Arithmetic Functions)

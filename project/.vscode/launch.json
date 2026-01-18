@@ -1,0 +1,33 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "GBA Debug (mGBA)",
+            "type": "cppdbg",
+            "request": "launch",
+            // [중요] Makefile이 만든 디버그용 ELF 파일을 찾습니다.
+            // 예: src/week2.c를 열고 있다면 -> build/debug/week2_debug.elf를 찾음
+            "program": "${workspaceFolder}/build/debug/${fileBasenameNoExtension}_debug.elf",
+            "args": [],
+            "stopAtEntry": true,
+            "cwd": "${workspaceFolder}",
+            "environment": [],
+            "externalConsole": false,
+            "MIMode": "gdb",
+            // [중요] DevkitPro GDB 경로 (본인 설치 경로 확인 필수!)
+            "miDebuggerPath": "C:/devkitPro/devkitARM/bin/arm-none-eabi-gdb.exe",
+            "setupCommands": [
+                {
+                    "description": "Enable pretty-printing for gdb",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                },
+                {
+                    // mGBA의 GDB 서버 포트로 접속 (기본값 2345)
+                    "description": "Connect to mGBA GDB Server",
+                    "text": "target remote localhost:2345"
+                }
+            ]
+        }
+    ]
+}
