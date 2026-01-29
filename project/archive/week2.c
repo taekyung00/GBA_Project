@@ -48,7 +48,6 @@ void draw_rect(fixed fx, fixed fy, int w, int h, u16 color) {
 // 메인 게임 루프
 // -------------------------------------------------------------------------
 int main() {
-
     // [Debug Trap]
     #ifdef DEBUG_MODE
         volatile int debug_wait = 1;

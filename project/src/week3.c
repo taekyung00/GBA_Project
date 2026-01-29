@@ -1,9 +1,8 @@
 #include "../include/fixed.h"
 #include "../include/gba.h"
-#include <math.h> // sin, cos 사용 (나중에는 LUT로 대체)
+#include "../include/math_2d.h"
 
-// 절댓값 함수 (stdlib 없이 구현)
-int my_abs(int n) { return (n < 0) ? -n : n; }
+
 
 // =========================================================================
 // 1. 그래픽 엔진 (Software Rasterizer)
@@ -28,8 +27,8 @@ void clear_screen(u16 color) {
 // [핵심] 브레즌햄 직선 알고리즘 (Bresenham's Line Algorithm)
 // 정수 덧셈/뺄셈만으로 직선을 그리는 마법의 함수
 void draw_line(int x0, int y0, int x1, int y1, u16 color) {
-    int dx = my_abs(x1 - x0);
-    int dy = my_abs(y1 - y0);
+    int dx = math_abs(x1 - x0);
+    int dy = math_abs(y1 - y0);
     int sx = (x0 < x1) ? 1 : -1;
     int sy = (y0 < y1) ? 1 : -1;
     
@@ -62,62 +61,71 @@ void draw_triangle_wire(int x1, int y1, int x2, int y2, int x3, int y3, u16 colo
     draw_line(x2, y2, x3, y3, color);
     draw_line(x3, y3, x1, y1, color);
 }
-// =========================================================================
-// 2. 수학 엔진 (Math Engine) - 여기가 핵심!
-// =========================================================================
 
-// 점 구조체
-typedef struct {
-    fixed x, y;
-} Vec2;
-
-// 2D 변환 행렬 구조체 (3x3 for Affine)
-/*
-   [ m00 m01 m02 ]   [ scale/rot  scale/rot  transX ]
-   [ m10 m11 m12 ] = [ scale/rot  scale/rot  transY ]
-   [ m20 m21 m22 ]   [    0           0        1    ]
-*/
-typedef struct {
-    fixed m[3][3];
-} Mat3;
-
-// 행렬과 벡터 곱하기 (Apply Matrix to Vertex)
-// CS200 Vertex Shader의 "gl_Position = uModel * vec4(pos, 1.0)" 역할
-Vec2 mat3_mul_vec2(Mat3 mat, Vec2 v) {
-    Vec2 result;
-    // x' = m00*x + m01*y + m02*1
-    result.x = fix_mul(mat.m[0][0], v.x) + fix_mul(mat.m[0][1], v.y) + mat.m[0][2];
-    // y' = m10*x + m11*y + m12*1
-    result.y = fix_mul(mat.m[1][0], v.x) + fix_mul(mat.m[1][1], v.y) + mat.m[1][2];
-    return result;
-}
 // =========================================================================
-// 2. 메인 게임 루프
+// 3. 메인 게임 루프
 // =========================================================================
 int main() {
     REG_DISPCNT = MODE_3 | BG2_ENABLE;
     
-    // 초기화
-    clear_screen(RGB(0, 0, 0));
+    // 삼각형 모델 (Local Space, 중심점 0,0)
+    Vec2 local_model[3] = {
+        { INT_TO_FIX(0),   INT_TO_FIX(-20) }, 
+        { INT_TO_FIX(-15), INT_TO_FIX(15)  }, 
+        { INT_TO_FIX(15),  INT_TO_FIX(15)  } 
+    };
 
-    // 1. 십자가 테스트 (직선)
-    draw_line(120, 10, 120, 150, RGB(10, 10, 10)); // 어두운 회색 세로선
-    draw_line(10, 80, 230, 80, RGB(10, 10, 10));   // 어두운 회색 가로선
+    // 초기 상태 (Transform)
+    Transform player_tf;
+    player_tf.position.x = INT_TO_FIX(120); // 화면 중앙
+    player_tf.position.y = INT_TO_FIX(80);
+    player_tf.scale      = INT_TO_FIX(1);   // 1.0배
+    player_tf.angle      = 0.0f;
 
-    // 2. 삼각형 테스트 (Wireframe)
-    // 화면 중앙에 빨간 삼각형 그리기
-    int p1_x = 120, p1_y = 30;
-    int p2_x = 80,  p2_y = 100;
-    int p3_x = 160, p3_y = 100;
-
-    draw_triangle(p1_x, p1_y, p2_x, p2_y, p3_x, p3_y, RGB(31, 0, 0));
-
-    // 3. 겹쳐진 삼각형 (파란색)
-    draw_triangle(120, 130, 80, 60, 160, 60, RGB(0, 0, 31));
 
     while (1) {
-        // 아직은 움직임 없음 (Static)
-    }
+        // [Input] 입력 처리
+        u16 keys = REG_KEYINPUT;
 
+        // 이동 (D-Pad)
+        if (!(keys & KEY_UP))    player_tf.position.y -= INT_TO_FIX(2);
+        if (!(keys & KEY_DOWN))  player_tf.position.y += INT_TO_FIX(2);
+        if (!(keys & KEY_LEFT))  player_tf.position.x -= INT_TO_FIX(2);
+        if (!(keys & KEY_RIGHT)) player_tf.position.x += INT_TO_FIX(2);
+
+        // 회전 (L/R 버튼)
+        if (!(keys & KEY_L))     player_tf.angle -= 0.05f;
+        if (!(keys & KEY_R))     player_tf.angle += 0.05f;
+
+        // 크기 (A/B 버튼)
+        if (!(keys & KEY_A))     player_tf.scale += INT_TO_FIX(1) / 10; // +0.1
+        if (!(keys & KEY_B))     player_tf.scale -= INT_TO_FIX(1) / 10; // -0.1
+        
+        // 크기 제한 (너무 작아지면 안보임)
+        if (player_tf.scale < INT_TO_FIX(1)/5) player_tf.scale = INT_TO_FIX(1)/5;
+
+
+        // [Render] 그리기
+        sync_vblank();             // 동기화
+        clear_screen(RGB(0,0,0));  // 지우기
+
+        // 변환 및 그리기 루프
+        Vec2 drawn_v[3];
+        for(int i=0; i<3; ++i) {
+            drawn_v[i] = apply_transform(local_model[i], player_tf);
+        }
+
+        // 와이어프레임 그리기
+        draw_triangle_wire(
+            FIX_TO_INT(drawn_v[0].x), FIX_TO_INT(drawn_v[0].y),
+            FIX_TO_INT(drawn_v[1].x), FIX_TO_INT(drawn_v[1].y),
+            FIX_TO_INT(drawn_v[2].x), FIX_TO_INT(drawn_v[2].y),
+            RGB(0, 31, 0) // 녹색
+        );
+
+        // UI 가이드 (십자가)
+        draw_line(120, 75, 120, 85, RGB(5,5,5));
+        draw_line(115, 80, 125, 80, RGB(5,5,5));
+    }
     return 0;
 }

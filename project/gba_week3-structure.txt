@@ -1,0 +1,14 @@
+Directory: project
+Files analyzed: 6
+
+Estimated tokens: 7.3k
+Directory structure:
+└── project/
+    ├── README.md
+    ├── makefile
+    ├── split_ingest.py
+    ├── include/
+    │   ├── fixed.h
+    │   └── gba.h
+    └── src/
+        └── week3.c
